@@ -1,0 +1,8 @@
+- name: Sanity Check
+  hosts: all
+  tasks:
+    - name: Ping all target servers
+      ping:
+    - name: Echo variables
+      debug:
+        msg: ansible_ssh_host {{ansible_ssh_host}}

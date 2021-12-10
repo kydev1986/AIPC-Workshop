@@ -1,0 +1,114 @@
+- name: Sanity Check
+  hosts: all
+  tasks:
+    - name: Ping all target servers
+      ping:
+    - name: Echo variables
+      debug:
+        msg: ansible_ssh_host {{ansible_ssh_host}}
+
+    - name: Install mandatory packages
+      apt:
+        update_cache: yes
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - ca-certificates
+        - curl
+        - gnupg
+        - lsb-release
+        - software-properties-common
+        - zip
+        - git
+        - nginx
+
+    - name: Add Docker and Terraform apt key
+      apt_key:
+        url: "{{ item }}"
+        state: present
+      loop:
+        - https://download.docker.com/linux/ubuntu/gpg
+        - https://apt.releases.hashicorp.com/gpg
+
+    - name: Add repositories
+      apt_repository:
+        repo: "{{ item }}"
+        state: present
+      loop: 
+        - "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+        - "ppa:ansible/ansible"
+        - "deb [arch=amd64] https://apt.releases.hashicorp.com focal main"
+
+    - name: Install Ansible,Terraform,Docker and Packer
+      apt:
+        update_cache: yes
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - ansible
+        - terraform
+        - packer
+
+    - name: Download docker-machine from URL
+      become: yes
+      get_url:
+        url: https://gitlab-docker-machine-downloads.s3.amazonaws.com/main/docker-machine-Linux-x86_64
+        dest: /usr/local/bin/docker-machine
+        mode: "a+x"
+  
+    - name: Add fred to docker and sudo group
+      user:
+        name: fred
+        shell: /bin/bash
+        state: present
+        groups: docker, sudo
+        append: yes
+    - name: Add ssh keys to fred
+      authorized_key:
+        user: fred
+        state: present
+        key: "{{ lookup('file', public_key_fred) }}"
+
+    - name: "Copy instructor public Key using Lookup"
+      authorized_key:
+        user: fred
+        state: present
+        key: https://drive.google.com/u/0/uc?id=17pBBYJhRkyrfVhLu44e23CA2PbeXPuMg&export=download
+    
+    - name: List all files in /var/www/html
+      find:
+        paths: /var/www/html
+        recurse: yes 
+      register: html_files 
+    - name: echo html_files
+      debug:
+        msg: ">>> {{ html_files }}"
+
+    - name: delete files from /var/www/html
+      file:
+        name: "{{ item.path }}"
+        state: absent
+      loop: "{{ html_files.files }}"
+
+    - name: copy nginx files to target host
+      copy:
+        src: ./nginx-files/
+        dest: /var/www/html/
+
+    - name: Reload nginx configuration
+      systemd:
+        daemon_reload: yes
+        name: "nginx"
+        state: restarted
+    
+    - name: Install all recomended patches
+      apt:
+        update_cache: yes 
+        upgrade: dist
+        state: latest
+    
+    - name: Reboot server
+      reboot:

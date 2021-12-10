@@ -1,0 +1,7 @@
+all:
+  hosts:
+    nginx-server:
+      ansible_ssh_host: 128.199.72.120
+      ansible_connection: ssh
+      ansible_user: root
+      ansible_ssh_private_key_file: "./keys/fred_rsa4096"

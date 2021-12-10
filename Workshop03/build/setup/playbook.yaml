@@ -1,0 +1,96 @@
+- name: Sanity Check
+  hosts: all
+  vars:
+    code_server_archive: https://github.com/cdr/code-server/releases/download/v3.3.1/code-server-3.3.1-linux-amd64.tar.gz
+    code_server_directory: code-server-3.3.1-linux-amd64
+    template_file:
+    - src: code-server.service
+      dest: /lib/systemd/system/code-server.service
+    - src: code-server.conf
+      dest: /etc/nginx/sites-available/code-server.conf
+    template_link:
+    - src: /usr/lib/code-server/bin/code-server
+      dest: /usr/bin/code-server
+    - src: /etc/nginx/sites-available/code-server.conf
+      dest: /etc/nginx/sites-enabled/code-server.conf
+  tasks:
+    - name: Ping all target servers
+      ping:
+    
+    - name: Install mandatory packages
+      apt:
+        update_cache: yes
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - nginx
+
+    - name: Check if code zip file exists
+      stat:
+        path: ~/code-server-3.3.1-linux-amd64.tar.gz
+      register: code_zip
+
+    - name: WGET code-server
+      get_url:
+        url: "{{code_server_archive}}"
+        dest: ~/code-server-3.3.1-linux-amd64.tar.gz
+        mode: "a+x"
+      when: not code_zip.stat.exists
+    
+    - name: Check if code extracted folder exists
+      stat:
+        path: ~/code-server-3.3.1-linux-amd64
+      register: code_extracted
+
+    - name: Unpack code-server
+      unarchive:
+        src: ~/code-server-3.3.1-linux-amd64.tar.gz
+        dest: ./
+        mode: "a+x"
+        remote_src: yes
+      when: not code_extracted.stat.exists
+
+    - name: Create code-server directory
+      file: 
+        path: /usr/lib/code-server
+        state: directory
+        mode: 0755
+
+    - name: Copy extracted code-server to directory
+      copy:
+        remote_src: yes
+        src: "~/{{ code_server_directory }}/"
+        dest: /usr/lib/code-server/
+
+    - name: Create user data for code-server
+      file: 
+        path: /var/lib/code-server
+        state: directory
+
+    - name: Copy local to remote
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+      loop: "{{ template_file }}"
+
+    - name: Create symbolic link for code-server and nginx
+      file:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        state: link
+      loop: "{{ template_link }}"
+    
+    - name: Enable services
+      systemd:
+        name: "{{ item }}"
+        state: started
+      loop:
+       - nginx
+       - code-server
+      register: services_state
+
+    - name: Install all recomended patches
+      apt:
+        update_cache: yes 
+        upgrade: dist
+        state: latest
